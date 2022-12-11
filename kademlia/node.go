@@ -13,11 +13,11 @@ import (
 // Node represents a host on the network.
 // The fields of Node may not be modified.
 type Node struct {
-	ID             ID
-	IP             net.IP
-	Port           int
-	addedAt        time.Time // time when the Node was added to the table
-	livenessChecks uint      // how often liveness was checked
+	ID         ID
+	IP         net.IP
+	Port       int
+	addedAt    time.Time // time when the Node was added to the table
+	liveChecks int
 }
 
 // ID is a unique identifier for each node.

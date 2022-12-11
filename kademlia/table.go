@@ -25,7 +25,7 @@ const (
 	bucketMinDistance = hashBits - nBuckets // Log distance of closest bucket
 
 	queryNodes         = 10
-	refreshInterval    = 10 * time.Second
+	refreshInterval    = 30 * time.Second
 	revalidateInterval = 10 * time.Second
 	copyNodesInterval  = 10 * time.Second
 	seedMinTableTime   = 5 * time.Minute
@@ -64,7 +64,6 @@ func NewTable(selfID ID, bootnodes []*Node, udpConn *net.UDPConn) (*Table, error
 			replacements: []*Node{},
 		}
 	}
-	_ = tab.findClosestNodes(selfID, MaxNeighbors)
 	go tab.loop()
 	go tab.HandleUdpPacket()
 	return tab, nil
@@ -81,11 +80,10 @@ func FromNodeIDStr(bootnode string) (n *Node, err error) {
 		return
 	}
 	n = &Node{
-		ID:             id,
-		IP:             ip,
-		Port:           port,
-		addedAt:        time.Now(),
-		livenessChecks: 0,
+		ID:      id,
+		IP:      ip,
+		Port:    port,
+		addedAt: time.Now(),
 	}
 	return
 }
@@ -97,15 +95,24 @@ func (tab *Table) doRevalidate() {
 	buf.WriteByte(ping.Kind())
 	buf.Write(ping.Encode())
 	nodesCountInBuckets := 0
+
 	for _, b := range &tab.buckets {
 		if len(b.entries) == 0 {
 			continue
 		}
-		node := b.entries[len(b.entries)-1]
+		// 总是ping第一个节点
+		node := b.entries[0]
+
 		_, _ = tab.udpConn.WriteToUDP(buf.Bytes(), &net.UDPAddr{IP: node.IP, Port: node.Port})
 		nodesCountInBuckets++
+		b.entries[0].liveChecks++
+		if b.entries[0].liveChecks > 3 {
+			b.mutex.Lock()
+			b.entries = deleteNode(b.entries, node)
+			log.Printf("Removed dead node, id: %x, ip: %v:%v", node.ID, node.IP, node.Port)
+			b.mutex.Unlock()
+		}
 	}
-
 	if nodesCountInBuckets == 0 {
 		for _, b := range tab.bootnodes {
 			_, _ = tab.udpConn.WriteToUDP(buf.Bytes(), &net.UDPAddr{IP: b.IP, Port: b.Port})
@@ -135,6 +142,12 @@ func (tab *Table) loop() {
 		copyNodes  = time.NewTicker(copyNodesInterval)
 		logTicker  = time.NewTicker(revalidateInterval)
 	)
+
+	// Start initial.
+	tab.doRevalidate()
+	tab.findNode()
+	tab.storageNode()
+
 loop:
 	for {
 		select {
@@ -207,22 +220,19 @@ func (tab *Table) HandlePacket(req Packet, addr *net.UDPAddr) {
 		_ = tab.sendPong(addr)
 		packet := req.(*Ping)
 		n := &Node{
-			ID:             packet.ReqID,
-			IP:             addr.IP,
-			Port:           addr.Port,
-			livenessChecks: 10,
+			ID:   packet.ReqID,
+			IP:   addr.IP,
+			Port: addr.Port,
 		}
-		tab.addSeenNode(n)
+		tab.addSeenNode(n, true)
 	case PongPacket:
 		packet := req.(*Pong)
 		n := &Node{
-			ID:             packet.ReqID,
-			IP:             addr.IP,
-			Port:           addr.Port,
-			addedAt:        time.Now(),
-			livenessChecks: 10,
+			ID:   packet.ReqID,
+			IP:   addr.IP,
+			Port: addr.Port,
 		}
-		tab.addSeenNode(n)
+		tab.addSeenNode(n, true)
 	case FindnodePacket:
 		packet := req.(*Findnode)
 		nodes := tab.findClosestNodes(packet.ReqID, MaxNeighbors)
@@ -231,7 +241,7 @@ func (tab *Table) HandlePacket(req Packet, addr *net.UDPAddr) {
 	case NeighborsPacket:
 		packet := req.(*Neighbors)
 		for _, n := range packet.NeighborNodes {
-			tab.addSeenNode(n)
+			tab.addSeenNode(n, false)
 		}
 
 	case ENRRequestPacket:
@@ -245,6 +255,9 @@ func (tab *Table) findClosestNodes(sourceID ID, count int) (nodes []*Node) {
 	distance := make(map[int][]*Node)
 	for _, b := range &tab.buckets {
 		for _, node := range b.entries {
+			if node.liveChecks > 0 {
+				continue
+			}
 			d := LogDist(sourceID, node.ID)
 			if distance[d] == nil {
 				distance[d] = []*Node{}
@@ -274,7 +287,7 @@ func (tab *Table) findClosestNodes(sourceID ID, count int) (nodes []*Node) {
 	return nodes[:r]
 }
 
-func (tab *Table) addSeenNode(n *Node) {
+func (tab *Table) addSeenNode(n *Node, resetLiveChecks bool) {
 	if n.ID == tab.selfID {
 		return
 	}
@@ -282,8 +295,14 @@ func (tab *Table) addSeenNode(n *Node) {
 	b := tab.bucket(n.ID)
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
-	if contains(b.entries, n.ID) {
-		// Already in bucket, don't add.
+
+	if i := contains(b.entries, n.ID); i != -1 {
+		// Already in bucket, move to the end.
+		if resetLiveChecks {
+			b.entries[i].liveChecks = 0
+		}
+		n.liveChecks = b.entries[i].liveChecks
+		b.entries = append(append(b.entries[:i], b.entries[i+1:]...), n)
 		return
 	}
 
@@ -378,13 +397,13 @@ type bucket struct {
 	mutex sync.Mutex
 }
 
-func contains(ns []*Node, id ID) bool {
-	for _, n := range ns {
+func contains(ns []*Node, id ID) int {
+	for i, n := range ns {
 		if n.ID == id {
-			return true
+			return i
 		}
 	}
-	return false
+	return -1
 }
 
 // deleteNode removes n from list.
