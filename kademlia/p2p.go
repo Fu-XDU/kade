@@ -9,7 +9,7 @@ const (
 	// Discovery packets are defined to be no larger than 1280 bytes.
 	// Packets larger than this size will be cut at the end and treated
 	// as invalid because their hash won't match.
-	maxPacketSize = 1280
+	maxPacketSize = 2560
 )
 
 type ReadPacket struct {
@@ -19,7 +19,7 @@ type ReadPacket struct {
 
 func ListenUDP(port int) (udpConn *net.UDPConn) {
 	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{
-		IP:   net.IPv4(127, 0, 0, 1),
+		IP:   net.IPv4zero,
 		Port: port,
 	})
 	if err != nil {

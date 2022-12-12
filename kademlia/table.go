@@ -3,6 +3,7 @@ package kademlia
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"kade/crypto"
 	"kade/utils"
@@ -72,8 +73,10 @@ func NewTable(selfID ID, bootnodes []*Node, udpConn *net.UDPConn) (*Table, error
 func FromNodeIDStr(bootnode string) (n *Node, err error) {
 	a := strings.Split(strings.Split(bootnode, "//")[1], "@")
 	addr := strings.Split(a[1], ":")
-	ip := net.IP{}
-	_ = ip.UnmarshalText([]byte(addr[0]))
+	ip := net.ParseIP(addr[0])
+	if ip == nil {
+		return nil, errors.New("wrong IP address")
+	}
 	port, _ := strconv.Atoi(addr[1])
 	id, err := ParseID(utils.Bytes2Hex(crypto.Keccak256(utils.FromHex(a[0]))))
 	if err != nil {
@@ -94,17 +97,17 @@ func (tab *Table) doRevalidate() {
 	buf := new(bytes.Buffer)
 	buf.WriteByte(ping.Kind())
 	buf.Write(ping.Encode())
-	nodesCountInBuckets := 0
+	bucketsEmpty := true
 
 	for _, b := range &tab.buckets {
 		if len(b.entries) == 0 {
 			continue
 		}
+		bucketsEmpty = false
 		// 总是ping第一个节点
 		node := b.entries[0]
-
 		_, _ = tab.udpConn.WriteToUDP(buf.Bytes(), &net.UDPAddr{IP: node.IP, Port: node.Port})
-		nodesCountInBuckets++
+
 		b.entries[0].liveChecks++
 		if b.entries[0].liveChecks > 3 {
 			b.mutex.Lock()
@@ -113,9 +116,12 @@ func (tab *Table) doRevalidate() {
 			b.mutex.Unlock()
 		}
 	}
-	if nodesCountInBuckets == 0 {
+	if bucketsEmpty {
 		for _, b := range tab.bootnodes {
-			_, _ = tab.udpConn.WriteToUDP(buf.Bytes(), &net.UDPAddr{IP: b.IP, Port: b.Port})
+			_, err := tab.udpConn.WriteToUDP(buf.Bytes(), &net.UDPAddr{IP: b.IP, Port: b.Port})
+			if err != nil {
+				log.Println(err)
+			}
 		}
 	}
 }

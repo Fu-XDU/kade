@@ -16,6 +16,7 @@ node_modules/
 .idea/
 *.pem
 logs/
+test
 
 # Bin
 kade
