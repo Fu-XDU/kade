@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"kade/crypto"
 	"kade/utils"
 	"log"
@@ -168,7 +167,7 @@ loop:
 			for _, b := range &tab.buckets {
 				nodesCount += len(b.entries)
 			}
-			fmt.Println("nodes count:", nodesCount)
+			log.Println("nodes count:", nodesCount)
 		case <-tab.closeReq:
 			break loop
 		}
@@ -216,7 +215,7 @@ func (tab *Table) HandleUdpPacket() {
 			continue
 		}
 		go tab.HandlePacket(req, addr)
-		log.Println("read from UDP:", req.Name(), addr)
+		//log.Println("read from UDP:", req.Name(), addr)
 	}
 }
 

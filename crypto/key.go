@@ -9,6 +9,7 @@ import (
 	"errors"
 	"github.com/labstack/gommon/log"
 	"io/ioutil"
+	"kade/utils/flags"
 	"os"
 )
 
@@ -34,12 +35,12 @@ func LoadKey() (sk *ecdsa.PrivateKey, pk *ecdsa.PublicKey) {
 }
 
 func loadSK() (sk *ecdsa.PrivateKey, err error) {
-	skBytes, _ := ioutil.ReadFile("./static/ec-sk.pem")
+	skBytes, _ := ioutil.ReadFile(flags.KeyDir + "/ec-sk.pem")
 	return Bytes2SK(skBytes)
 }
 
 func loadPK() (pk *ecdsa.PublicKey, err error) {
-	pkBytes, _ := ioutil.ReadFile("./static/ec-pk.pem")
+	pkBytes, _ := ioutil.ReadFile(flags.KeyDir + "/ec-pk.pem")
 	return Bytes2PK(pkBytes)
 }
 
@@ -82,8 +83,8 @@ func generateKeys() (sk *ecdsa.PrivateKey, err error) {
 		Type:  "ECD PUBLIC KEY",
 		Bytes: pkBytes,
 	}
-	skFile, _ := os.Create("./static/ec-sk.pem")
-	pkFile, _ := os.Create("./static/ec-pk.pem")
+	skFile, _ := os.Create(flags.KeyDir + "/ec-sk.pem")
+	pkFile, _ := os.Create(flags.KeyDir + "/ec-pk.pem")
 	if err = pem.Encode(skFile, &skBlock); err != nil {
 		return
 	}
@@ -94,8 +95,8 @@ func generateKeys() (sk *ecdsa.PrivateKey, err error) {
 }
 
 func keyExists() bool {
-	_ = os.Mkdir("static", 0777)
-	return exists("./static/ec-sk.pem") && exists("./static/ec-pk.pem")
+	_ = os.Mkdir(flags.KeyDir, 0777)
+	return exists(flags.KeyDir+"/ec-sk.pem") && exists(flags.KeyDir+"/ec-pk.pem")
 }
 
 func exists(path string) bool {

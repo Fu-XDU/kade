@@ -7,6 +7,7 @@ import (
 	"kade/crypto"
 	"kade/kademlia"
 	"kade/utils"
+	"kade/utils/flags"
 	"os"
 )
 
@@ -19,7 +20,8 @@ const (
 var (
 	app       = cli.NewApp()
 	baseFlags = []cli.Flag{
-		utils.P2PPortFlag,
+		flags.P2PPortFlag,
+		flags.KeyDirFlag,
 	}
 )
 
