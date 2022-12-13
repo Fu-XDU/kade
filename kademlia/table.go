@@ -247,7 +247,10 @@ func (tab *Table) HandlePacket(req Packet, addr *net.UDPAddr) {
 	case NeighborsPacket:
 		packet := req.(*Neighbors)
 		for _, n := range packet.NeighborNodes {
-			tab.addSeenNode(n, false)
+			b := tab.bucket(n.ID)
+			if i := contains(b.entries, n.ID); i == -1 {
+				_ = tab.sendPing(&net.UDPAddr{IP: n.IP, Port: n.Port})
+			}
 		}
 
 	case ENRRequestPacket:
