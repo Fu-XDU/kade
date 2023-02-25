@@ -1,13 +1,11 @@
 # Kade
 
-A P2P client which implements the Kademlia protocol. 
+A simple P2P client which implements the Kademlia protocol. 
 
 ### Notes
 
-If your node does not have a static IP address, other nodes cannot reach you due to the NAT.
+In Kade, if your node does not have a static IP address, other nodes cannot reach you due to the NAT.
 
-I tried geth, it also has this problem. 
+I tried geth, two peers behind each NAT can be connected successfully.
 
-Maybe NAT traversal is a solution, but it does not 100% work.
-
-So, make sure each of your nodes has its own static IP address.
+Make sure each of your nodes has its own static IP address.
